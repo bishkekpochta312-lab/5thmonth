@@ -9,6 +9,7 @@ urlpatterns = [
     # Товары
     path('products/', views.ProductListAPIView.as_view(), name='product-list'),
     path('products/<int:id>/', views.ProductDetailAPIView.as_view(), name='product-detail'),
+    path('products/reviews/', views.ProductWithReviewsListAPIView.as_view(), name='product-with-reviews'),
     
     # Отзывы
     path('reviews/', views.ReviewListAPIView.as_view(), name='review-list'),
