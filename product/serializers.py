@@ -12,8 +12,24 @@ class CategorySerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'products_count']
 
 
+class CategoryCreateUpdateSerializer(serializers.ModelSerializer):
+    """Сериализатор для создания и обновления категории"""
+    class Meta:
+        model = Category
+        fields = ['id', 'name']
+
+
 class ReviewSerializer(serializers.ModelSerializer):
     """Сериализатор для отзыва"""
+    product_title = serializers.ReadOnlyField(source='product.title')
+    
+    class Meta:
+        model = Review
+        fields = ['id', 'text', 'stars', 'product', 'product_title']
+
+
+class ReviewCreateUpdateSerializer(serializers.ModelSerializer):
+    """Сериализатор для создания и обновления отзыва"""
     class Meta:
         model = Review
         fields = ['id', 'text', 'stars', 'product']
@@ -33,21 +49,19 @@ class ProductWithReviewsSerializer(serializers.ModelSerializer):
         """Вычисляем средний рейтинг всех отзывов товара"""
         rating_avg = obj.reviews.aggregate(Avg('stars'))['stars__avg']
         if rating_avg is not None:
-            return round(rating_avg, 1)  # Округляем до 1 знака
+            return round(rating_avg, 1)
         return None
 
 
-# Старый сериализатор для простого списка товаров (без отзывов)
 class ProductListSerializer(serializers.ModelSerializer):
     """Сериализатор для списка товаров (без отзывов)"""
     category_name = serializers.ReadOnlyField(source='category.name')
     
     class Meta:
         model = Product
-        fields = ['id', 'title', 'price', 'category_name']
+        fields = ['id', 'title', 'description', 'price', 'category', 'category_name']
 
 
-# Детальный сериализатор для одного товара (с отзывами)
 class ProductDetailSerializer(serializers.ModelSerializer):
     """Сериализатор для детального просмотра товара"""
     category_name = serializers.ReadOnlyField(source='category.name')
@@ -63,3 +77,10 @@ class ProductDetailSerializer(serializers.ModelSerializer):
         if rating_avg is not None:
             return round(rating_avg, 1)
         return None
+
+
+class ProductCreateUpdateSerializer(serializers.ModelSerializer):
+    """Сериализатор для создания и обновления товара"""
+    class Meta:
+        model = Product
+        fields = ['id', 'title', 'description', 'price', 'category']
