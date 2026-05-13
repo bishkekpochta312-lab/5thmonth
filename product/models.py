@@ -61,9 +61,9 @@ class Product(models.Model):
         self.description = ProductValidators.validate_description(self.description)
         self.price = ProductValidators.validate_price(self.price)
     
-    def save(self, *args, **kwargs):
-        self.full_clean()  # Вызываем валидацию перед сохранением
-        super().save(*args, **kwargs)
+    # def save(self, *args, **kwargs):
+    #     self.full_clean()  # Вызываем валидацию перед сохранением
+    #     super().save(*args, **kwargs)
     
     def __str__(self):
         return self.title
