@@ -111,30 +111,54 @@ class ProductCreateUpdateSerializer(serializers.ModelSerializer):
     
     def validate_title(self, value):
         """Валидация названия товара"""
-        return ProductValidators.validate_title(value)
+        if not value or not value.strip():
+            raise serializers.ValidationError("Название товара не может быть пустым")
+        if len(value) < 3:
+            raise serializers.ValidationError("Название товара должно содержать минимум 3 символа")
+        return value.strip()
     
     def validate_description(self, value):
         """Валидация описания товара"""
-        return ProductValidators.validate_description(value)
+        if not value or not value.strip():
+            raise serializers.ValidationError("Описание товара не может быть пустым")
+        if len(value) < 10:
+            raise serializers.ValidationError("Описание товара должно содержать минимум 10 символов")
+        return value.strip()
     
     def validate_price(self, value):
-        """Валидация цены"""
-        return ProductValidators.validate_price(value)
+        """Валидация цены - принимаем разные форматы"""
+        # Если пришла строка, пробуем преобразовать в число
+        if isinstance(value, str):
+            try:
+                value = float(value)
+            except ValueError:
+                raise serializers.ValidationError("Цена должна быть числом")
+        
+        # Проверяем тип
+        if not isinstance(value, (int, float)):
+            raise serializers.ValidationError("Цена должна быть числом")
+        
+        # Проверяем значение
+        if value <= 0:
+            raise serializers.ValidationError("Цена товара должна быть больше 0")
+        
+        if value > 1000000:
+            raise serializers.ValidationError("Цена товара не может превышать 1 000 000")
+        
+        # Округляем до 2 знаков
+        return round(value, 2)
     
     def validate_category(self, value):
         """Валидация категории"""
-        return ProductValidators.validate_category(value)
-    
-    def validate(self, data):
-        """Общая валидация"""
-        # Очистка текстовых полей
-        if 'title' in data:
-            data['title'] = CommonValidators.sanitize_text(data['title'])
-        if 'description' in data:
-            data['description'] = CommonValidators.sanitize_text(data['description'])
+        from product.models import Category
+        if not value:
+            raise serializers.ValidationError("Категория товара обязательна")
         
-        return data
-
+        # Если пришел ID, проверяем существование
+        if isinstance(value, int):
+            if not Category.objects.filter(id=value).exists():
+                raise serializers.ValidationError(f"Категория с id={value} не существует")
+        return value
 
 class ProductWithReviewsSerializer(serializers.ModelSerializer):
     """Сериализатор для товара с отзывами и средним рейтингом"""

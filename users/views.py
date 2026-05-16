@@ -1,4 +1,5 @@
-from rest_framework import status
+# users/views.py
+from rest_framework import status, generics
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
@@ -15,51 +16,64 @@ import random
 import string
 
 
-class RegisterAPIView(APIView):
+# ==================== РЕГИСТРАЦИЯ (CBV) ====================
+
+class RegisterView(generics.CreateAPIView):
+    """
+    POST: Регистрация нового пользователя
+    """
     permission_classes = [AllowAny]
+    serializer_class = CustomUserCreateSerializer
     
-    def post(self, request):
-        serializer = CustomUserCreateSerializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.save()
-            return Response({
-                'status': 'success',
-                'message': 'Регистрация успешна. Подтвердите email.',
-                'user': CustomUserSerializer(user).data
-            }, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        
+        return Response({
+            'status': 'success',
+            'message': 'Регистрация успешна. Подтвердите email.',
+            'user': CustomUserSerializer(user).data
+        }, status=status.HTTP_201_CREATED)
 
 
-class ConfirmEmailAPIView(APIView):
+# ==================== ПОДТВЕРЖДЕНИЕ (CBV) ====================
+
+class ConfirmEmailView(APIView):
+    """
+    POST: Подтверждение email пользователя через код
+    """
     permission_classes = [AllowAny]
     
     def post(self, request):
         serializer = EmailConfirmationSerializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.validated_data['user']
-            confirmation_code = serializer.validated_data['confirmation_code']
-            
-            user.is_active = True
-            user.is_verified = True
-            user.save()
-            
-            confirmation_code.is_used = True
-            confirmation_code.save()
-            
-            refresh = RefreshToken.for_user(user)
-            
-            return Response({
-                'status': 'success',
-                'message': 'Email подтвержден',
-                'user': CustomUserSerializer(user).data,
-                'refresh': str(refresh),
-                'access': str(refresh.access_token),
-            }, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer.is_valid(raise_exception=True)
+        
+        user = serializer.validated_data['user']
+        confirmation_code = serializer.validated_data['confirmation_code']
+        
+        user.is_active = True
+        user.is_verified = True
+        user.save()
+        
+        confirmation_code.is_used = True
+        confirmation_code.save()
+        
+        refresh = RefreshToken.for_user(user)
+        
+        return Response({
+            'status': 'success',
+            'message': 'Email подтвержден',
+            'user': CustomUserSerializer(user).data,
+            'refresh': str(refresh),
+            'access': str(refresh.access_token),
+        }, status=status.HTTP_200_OK)
 
 
-class ResendConfirmationCodeAPIView(APIView):
-    """Повторная отправка кода подтверждения"""
+class ResendConfirmationCodeView(APIView):
+    """
+    POST: Повторная отправка кода подтверждения
+    """
     permission_classes = [AllowAny]
     
     def post(self, request):
@@ -99,47 +113,48 @@ class ResendConfirmationCodeAPIView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-class LoginAPIView(APIView):
+# ==================== АВТОРИЗАЦИЯ (CBV) ====================
+
+class LoginView(APIView):
+    """
+    POST: Авторизация пользователя и получение токенов
+    """
     permission_classes = [AllowAny]
     
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
-        if serializer.is_valid():
-            user = authenticate(
-                request,
-                username=serializer.validated_data['email'],
-                password=serializer.validated_data['password']
-            )
-            
-            if not user:
-                return Response({'error': 'Неверные учетные данные'}, status=status.HTTP_401_UNAUTHORIZED)
-            
-            if not user.is_verified:
-                return Response({
-                    'error': 'Пользователь не подтвержден. Подтвердите email.',
-                    'need_confirmation': True
-                }, status=status.HTTP_403_FORBIDDEN)
-            
-            refresh = RefreshToken.for_user(user)
-            
+        serializer.is_valid(raise_exception=True)
+        
+        user = authenticate(
+            request,
+            username=serializer.validated_data['email'],
+            password=serializer.validated_data['password']
+        )
+        
+        if not user:
             return Response({
-                'refresh': str(refresh),
-                'access': str(refresh.access_token),
-                'user': CustomUserSerializer(user).data
-            })
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                'error': 'Неверные учетные данные'
+            }, status=status.HTTP_401_UNAUTHORIZED)
+        
+        if not user.is_verified:
+            return Response({
+                'error': 'Пользователь не подтвержден. Подтвердите email.',
+                'need_confirmation': True
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        refresh = RefreshToken.for_user(user)
+        
+        return Response({
+            'refresh': str(refresh),
+            'access': str(refresh.access_token),
+            'user': CustomUserSerializer(user).data
+        })
 
 
-class ProfileAPIView(APIView):
-    permission_classes = [IsAuthenticated]
-    
-    def get(self, request):
-        serializer = CustomUserSerializer(request.user)
-        return Response(serializer.data)
-
-
-class LogoutAPIView(APIView):
-    """Выход из системы"""
+class LogoutView(APIView):
+    """
+    POST: Выход из системы (blacklist refresh token)
+    """
     permission_classes = [IsAuthenticated]
     
     def post(self, request):
@@ -151,15 +166,17 @@ class LogoutAPIView(APIView):
                 'status': 'success',
                 'message': 'Выход выполнен успешно'
             }, status=status.HTTP_200_OK)
-        except Exception:
+        except Exception as e:
             return Response({
                 'status': 'error',
                 'message': 'Неверный токен'
             }, status=status.HTTP_400_BAD_REQUEST)
 
 
-class RefreshTokenAPIView(APIView):
-    """Обновление access токена"""
+class RefreshTokenView(APIView):
+    """
+    POST: Обновление access токена
+    """
     permission_classes = [AllowAny]
     
     def post(self, request):
@@ -179,3 +196,54 @@ class RefreshTokenAPIView(APIView):
             return Response({
                 'error': 'Неверный refresh token'
             }, status=status.HTTP_401_UNAUTHORIZED)
+
+
+# ==================== ПРОФИЛЬ (CBV) ====================
+
+class ProfileView(generics.RetrieveUpdateAPIView):
+    """
+    GET: Получение профиля пользователя
+    PUT/PATCH: Обновление профиля пользователя
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = CustomUserSerializer
+    
+    def get_object(self):
+        return self.request.user
+
+
+class ChangePasswordView(APIView):
+    """
+    POST: Смена пароля пользователя
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        old_password = request.data.get('old_password')
+        new_password = request.data.get('new_password')
+        new_password2 = request.data.get('new_password2')
+        
+        if not all([old_password, new_password, new_password2]):
+            return Response({
+                'error': 'Все поля обязательны'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if new_password != new_password2:
+            return Response({
+                'error': 'Новые пароли не совпадают'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        user = request.user
+        
+        if not user.check_password(old_password):
+            return Response({
+                'error': 'Неверный текущий пароль'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        user.set_password(new_password)
+        user.save()
+        
+        return Response({
+            'status': 'success',
+            'message': 'Пароль успешно изменен. Войдите снова с новым паролем.'
+        }, status=status.HTTP_200_OK)
